@@ -130,16 +130,47 @@ class FlushWorker:
     # -- main loop ----------------------------------------------------------
 
     async def _loop(self) -> None:
-        interval = self._config.mysql_flush_interval_seconds
         while self._running:
             try:
-                await asyncio.sleep(interval)
+                delay = self._seconds_until_next_flush()
+                await asyncio.sleep(delay)
                 await self.flush_once()
             except asyncio.CancelledError:
                 break
             except Exception:
                 self._log.exception("Unexpected error in flush loop")
                 self._errors_count += 1
+
+    # -- wall-clock aligned sleep calculation --------------------------------
+
+    def _seconds_until_next_flush(self, now: datetime | None = None) -> float:
+        """Return seconds to sleep until the next wall-clock-aligned flush.
+
+        For a 60 s interval the target is second 2 of every minute
+        (i.e. HH:MM:02).  The method accepts an optional *now* (UTC-aware)
+        for deterministic testing.
+        """
+        interval = self._config.mysql_flush_interval_seconds
+        if now is None:
+            now = datetime.now(timezone.utc)
+
+        # Target second within each interval-aligned boundary.
+        # For interval=60 this is second 2 of each minute.
+        target_second = 2 if interval == 60 else interval % 60
+
+        # Find the next interval boundary + target_second that is strictly
+        # after *now*.
+        # For interval=60: boundary = start of current minute
+        # General: boundary = floor(now_epoch / interval) * interval
+        epoch = now.timestamp()
+        current_boundary = (epoch // interval) * interval
+        candidate = current_boundary + target_second
+
+        if candidate <= epoch:
+            # The target for this interval has already passed; advance to next.
+            candidate += interval
+
+        return candidate - epoch
 
     # -- single flush -------------------------------------------------------
 

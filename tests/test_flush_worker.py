@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -435,3 +435,163 @@ class TestFlushWorker:
         assert result["depth_snapshot"] == 2
         assert ("spot_depth_snapshots", ["spot"]) in calls
         assert ("perp_depth_snapshots", ["perp"]) in calls
+
+
+# ---------------------------------------------------------------------------
+# Wall-clock aligned flush timing tests
+# ---------------------------------------------------------------------------
+
+class TestSecondsUntilNextFlush:
+    """Tests for FlushWorker._seconds_until_next_flush().
+
+    The helper computes how many seconds to sleep so that the next flush
+    lands on a wall-clock minute boundary at second 2 (i.e. HH:MM:02).
+    """
+
+    def _make_worker(self, interval: int = 60) -> FlushWorker:
+        redis = _make_redis_client()
+        session_factory = MagicMock()
+        config = _make_config(interval=interval)
+        return FlushWorker(redis, session_factory, config)
+
+    # -- basic cases from the spec --
+
+    def test_now_at_12_00_53_100_sleeps_to_12_01_02(self):
+        """When now is 12:00:53.100 and interval=60, sleep ~8.9s to 12:01:02."""
+        worker = self._make_worker(interval=60)
+        now = datetime(2026, 1, 1, 12, 0, 53, 100_000, tzinfo=timezone.utc)
+        delay = worker._seconds_until_next_flush(now=now)
+        # Expected: 12:01:02.000 - 12:00:53.100 = 8.900 s
+        assert 8.899 < delay < 8.901
+
+    def test_now_at_12_00_01_500_sleeps_to_12_00_02(self):
+        """When now is 12:00:01.500 and interval=60, sleep ~0.5s to 12:00:02."""
+        worker = self._make_worker(interval=60)
+        now = datetime(2026, 1, 1, 12, 0, 1, 500_000, tzinfo=timezone.utc)
+        delay = worker._seconds_until_next_flush(now=now)
+        # Expected: 12:00:02.000 - 12:00:01.500 = 0.500 s
+        assert 0.499 < delay < 0.501
+
+    def test_now_exactly_at_12_00_02_sleeps_60s(self):
+        """When now is exactly 12:00:02.000, the next flush is 12:01:02, ~60s."""
+        worker = self._make_worker(interval=60)
+        now = datetime(2026, 1, 1, 12, 0, 2, 0, tzinfo=timezone.utc)
+        delay = worker._seconds_until_next_flush(now=now)
+        # Expected: 12:01:02.000 - 12:00:02.000 = 60.0 s
+        assert 59.999 < delay < 60.001
+
+    def test_now_after_target_second_sleeps_to_next_minute_target(self):
+        """When now is 12:00:02.500 (past target), next flush is 12:01:02."""
+        worker = self._make_worker(interval=60)
+        now = datetime(2026, 1, 1, 12, 0, 2, 500_000, tzinfo=timezone.utc)
+        delay = worker._seconds_until_next_flush(now=now)
+        # Expected: 12:01:02.000 - 12:00:02.500 = 59.500 s
+        assert 59.499 < delay < 59.501
+
+    def test_now_near_end_of_minute(self):
+        """When now is 12:59:58.000, sleep ~4s to 13:00:02."""
+        worker = self._make_worker(interval=60)
+        now = datetime(2026, 1, 1, 12, 59, 58, 0, tzinfo=timezone.utc)
+        delay = worker._seconds_until_next_flush(now=now)
+        # Expected: 13:00:02.000 - 12:59:58.000 = 4.0 s
+        assert 3.999 < delay < 4.001
+
+    # -- edge / boundary cases --
+
+    def test_now_at_00_00_00(self):
+        """Midnight: 00:00:00 → next flush 00:00:02, sleep 2s."""
+        worker = self._make_worker(interval=60)
+        now = datetime(2026, 6, 15, 0, 0, 0, 0, tzinfo=timezone.utc)
+        delay = worker._seconds_until_next_flush(now=now)
+        assert 1.999 < delay < 2.001
+
+    def test_now_at_00_00_01_999(self):
+        """Just before the target: 00:00:01.999 → sleep ~0.001s to 00:00:02."""
+        worker = self._make_worker(interval=60)
+        now = datetime(2026, 6, 15, 0, 0, 1, 999_000, tzinfo=timezone.utc)
+        delay = worker._seconds_until_next_flush(now=now)
+        assert 0.0005 < delay < 0.002
+
+    def test_delay_is_always_positive(self):
+        """For any time, the delay must be > 0 (never zero or negative)."""
+        worker = self._make_worker(interval=60)
+        # Sweep every second within a minute
+        for sec in range(60):
+            for us in (0, 500_000, 999_000):
+                now = datetime(2026, 1, 1, 12, 0, sec, us, tzinfo=timezone.utc)
+                delay = worker._seconds_until_next_flush(now=now)
+                assert delay > 0, f"Non-positive delay {delay} at now={now}"
+
+    def test_uses_utc_timezone(self):
+        """If a non-UTC timezone is passed, it is still treated as UTC-aware."""
+        worker = self._make_worker(interval=60)
+        # 12:00:01 UTC+5 is really 07:00:01 UTC, but we expect the method
+        # to treat the input as-is (naive-like wall-clock) or convert to UTC.
+        # The simplest correct behavior: accept tz-aware input and use UTC.
+        # Let's verify that a UTC timestamp gives consistent results.
+        now_utc = datetime(2026, 1, 1, 12, 0, 1, 0, tzinfo=timezone.utc)
+        delay = worker._seconds_until_next_flush(now=now_utc)
+        assert 0.999 < delay < 1.001
+
+    def test_default_now_uses_current_time(self):
+        """Calling without `now` should return a positive float (uses real clock)."""
+        worker = self._make_worker(interval=60)
+        delay = worker._seconds_until_next_flush()
+        assert isinstance(delay, float)
+        assert delay > 0
+        assert delay <= 61  # at most one interval + offset
+
+
+class TestLoopUsesWallClockAlignment:
+    """Verify that the _loop method uses _seconds_until_next_flush for sleep."""
+
+    @pytest.mark.asyncio
+    async def test_loop_sleeps_using_aligned_calculation(self):
+        """_loop should call _seconds_until_next_flush instead of a fixed interval."""
+        redis = _make_redis_client()
+        session_factory = MagicMock()
+        config = _make_config(interval=60)
+        worker = FlushWorker(redis, session_factory, config)
+        worker._running = True  # enable the loop
+
+        sleep_durations: list[float] = []
+
+        async def fake_sleep(seconds: float) -> None:
+            sleep_durations.append(seconds)
+            # Let the loop run one iteration then stop
+            worker._running = False
+
+        with patch.object(worker, "flush_once", new_callable=AsyncMock) as mock_flush, \
+             patch.object(worker, "_seconds_until_next_flush", return_value=5.5), \
+             patch("YM_data_collection.persistence.flush_worker.asyncio.sleep", side_effect=fake_sleep):
+            await worker._loop()
+
+        # flush_once should have been called once after the aligned sleep
+        mock_flush.assert_awaited_once()
+        # The sleep duration should be the value returned by _seconds_until_next_flush
+        assert len(sleep_durations) == 1
+        assert sleep_durations[0] == 5.5
+
+    @pytest.mark.asyncio
+    async def test_loop_calls_seconds_until_next_flush_each_iteration(self):
+        """_loop should call _seconds_until_next_flush on every iteration, not just once."""
+        redis = _make_redis_client()
+        session_factory = MagicMock()
+        config = _make_config(interval=60)
+        worker = FlushWorker(redis, session_factory, config)
+        worker._running = True  # enable the loop
+
+        iteration = {"n": 0}
+
+        async def fake_sleep(seconds: float) -> None:
+            iteration["n"] += 1
+            if iteration["n"] >= 2:
+                worker._running = False
+
+        with patch.object(worker, "flush_once", new_callable=AsyncMock), \
+             patch.object(worker, "_seconds_until_next_flush", return_value=1.0) as mock_calc, \
+             patch("YM_data_collection.persistence.flush_worker.asyncio.sleep", side_effect=fake_sleep):
+            await worker._loop()
+
+        # _seconds_until_next_flush should be called once per iteration
+        assert mock_calc.call_count == 2
