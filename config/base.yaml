@@ -1,0 +1,175 @@
+app:
+  app_name: YM_data_collection
+  env: dev  # Fallback overlay when CLI --env is omitted.
+  timezone: UTC
+  log_level: INFO
+  debug: false
+
+mysql:
+  host: 127.0.0.1
+  port: 3306
+  database: quant_data
+  username: quant_user
+  password_secret_ref: MYSQL_PASSWORD
+  pool_size: 10
+  max_overflow: 20
+  connect_timeout_seconds: 10
+  read_timeout_seconds: 30
+  write_timeout_seconds: 30
+
+cache:
+  enabled: true
+  backend: redis
+  host: 127.0.0.1
+  port: 6379
+  password_secret_ref: REDIS_PASSWORD
+  db: 0
+  ttl_seconds: 300
+  key_prefix: ym:binance
+
+auth:
+  enabled: false
+  http_token_secret_ref: DATA_API_TOKEN
+  ws_token_secret_ref: DATA_WS_TOKEN
+  internal_service_token_secret_ref: INTERNAL_SERVICE_TOKEN
+
+binance:
+  spot:
+    rest_base_url: https://api.binance.com
+    ws_base_url: wss://stream.binance.com:9443/ws
+  perp:
+    rest_base_url: https://fapi.binance.com
+    ws_base_url: wss://fstream.binance.com/ws
+  spot_enabled: true
+  perp_enabled: true
+  symbols:
+    - BTCUSDT
+    - ETHUSDT
+  intervals:
+    - 1m
+    - 1h
+    - 1d
+  http_timeout_seconds: 15
+  http_retry_times: 3
+  ws_reconnect_backoff_seconds: 5
+  ws_ping_interval_seconds: 20
+  proxy:
+    enabled: false
+    http_proxy: ""
+    https_proxy: ""
+  rate_limit:
+    spot_weight_per_minute: 1200
+    perp_weight_per_minute: 2400
+    min_request_interval_ms: 100
+    backoff_on_429_seconds: 30
+    max_concurrent_requests: 5
+
+realtime_persistence:
+  mysql_flush_interval_seconds: 60
+  redis_retention_after_flush_seconds: 120
+  write_policy:
+    kline: mysql_first
+    funding_rate: mysql_first
+    mark_price: redis_first
+    index_price: redis_first
+    open_interest: redis_first
+    depth_snapshot: redis_first
+
+ingestion:
+  historical_batch_size: 1000
+  historical_start_ts_ms: null
+  historical_end_ts_ms: null
+  realtime_enabled: true
+  checkpoint_enabled: true
+  raw_trace_enabled: true
+
+validation:
+  kline_boundary_validation_enabled: true
+  kline_auto_repair_enabled: true
+  trade_quote_quantity_tolerance_bps: 5
+  mark_index_deviation_warning_bps: 50
+  depth_order_validation_enabled: true
+  quality_record_enabled: true
+
+depth:
+  default_depth_levels: 10
+  freshness_threshold_ms: 1000
+  max_snapshot_age_ms: 3000
+
+slippage:
+  slippage_estimation_enabled: true
+  default_slippage_depth_levels: 10
+  max_slippage_depth_levels: 20
+  reference_price_mode: best_bid_ask
+  insufficient_depth_policy: reject
+  allow_partial_fill_estimation: false
+
+service:
+  http_enabled: true
+  http_host: 0.0.0.0
+  http_port: 18081
+  ws_enabled: true
+  ws_host: 0.0.0.0
+  ws_port: 18082
+  default_page_count: 20
+  max_page_count: 500
+  download_enabled: true
+  http_read_timeout_seconds: 30
+  http_write_timeout_seconds: 30
+  http_keepalive_enabled: true
+  request_id_enabled: true
+  api_docs_enabled: true
+
+websocket:
+  heartbeat_enabled: true
+  heartbeat_interval_seconds: 20
+  pong_timeout_seconds: 10
+  client_idle_timeout_seconds: 60
+  max_subscriptions_per_connection: 50
+  max_connections: 100
+  send_queue_size: 1000
+  message_max_bytes: 1048576
+  snapshot_push_enabled: true
+  quality_event_push_enabled: true
+  stream_status_push_enabled: true
+
+query_source:
+  snapshot_cache_first_enabled: true
+  depth_cache_first_enabled: true
+  snapshot_mysql_fallback_enabled: true
+  depth_mysql_fallback_enabled: true
+  cache_backfill_on_fallback_enabled: true
+  allow_http_read_from_parquet: false
+
+window:
+  default_recent_kline_count: 200
+  max_recent_kline_count: 2000
+  http_window_refill_enabled: true
+  http_window_refill_limit: 5000
+
+export:
+  enabled: true
+  base_dir: YM_data_collection/artifacts/exports
+  default_format: parquet
+  compression: snappy
+  partition_rule: by_symbol_interval_date
+  manifest_write_enabled: true
+  overwrite_same_version_enabled: true
+
+download:
+  download_enabled: true
+  download_token_required: true
+  download_url_expire_seconds: 600
+  max_download_file_size_mb: 2048
+  download_audit_enabled: true
+
+quality:
+  enabled: true
+  warning_thresholds:
+    kline_gap_count: 1
+    depth_stale_ms: 1000
+  error_thresholds:
+    kline_gap_count: 3
+    depth_stale_ms: 3000
+  email_alert_enabled: false
+  email_recipients: []

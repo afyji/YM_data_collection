@@ -1,0 +1,47 @@
+app:
+  env: dev
+  log_level: DEBUG
+  debug: true
+
+auth:
+  enabled: false
+
+mysql:
+  host: 127.0.0.1
+  port: 3306
+  database: quant_data_dev
+  username: root
+  pool_size: 5
+  max_overflow: 10
+
+cache:
+  host: 127.0.0.1
+  port: 6379
+  db: 1
+  ttl_seconds: 120
+  key_prefix: ym:dev:binance
+
+service:
+  http_host: 127.0.0.1
+  http_port: 18081
+  ws_host: 127.0.0.1
+  ws_port: 18082
+  api_docs_enabled: true
+
+websocket:
+  max_connections: 10
+  max_subscriptions_per_connection: 20
+
+download:
+  download_token_required: false
+
+binance:
+  spot:
+    rest_base_url: https://api.binance.com
+    ws_base_url: wss://stream.binance.com:9443/ws
+  perp:
+    rest_base_url: https://fapi.binance.com
+    ws_base_url: wss://fstream.binance.com/ws
+
+quality:
+  email_alert_enabled: false

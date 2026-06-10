@@ -1,0 +1,56 @@
+app:
+  env: prod
+  log_level: INFO
+  debug: false
+
+auth:
+  enabled: true
+
+mysql:
+  host: mysql-prod.internal
+  port: 3306
+  database: quant_data_prod
+  username: quant_prod
+  pool_size: 20
+  max_overflow: 40
+  connect_timeout_seconds: 5
+
+cache:
+  host: redis-prod.internal
+  port: 6379
+  db: 0
+  ttl_seconds: 300
+  key_prefix: ym:prod:binance
+
+service:
+  http_host: 0.0.0.0
+  http_port: 18081
+  ws_host: 0.0.0.0
+  ws_port: 18082
+  api_docs_enabled: false
+  max_page_count: 200
+
+websocket:
+  heartbeat_enabled: true
+  heartbeat_interval_seconds: 15
+  pong_timeout_seconds: 8
+  client_idle_timeout_seconds: 45
+  max_connections: 200
+  max_subscriptions_per_connection: 100
+
+download:
+  download_token_required: true
+  download_audit_enabled: true
+
+binance:
+  spot:
+    rest_base_url: https://api.binance.com
+    ws_base_url: wss://stream.binance.com:9443/ws
+  perp:
+    rest_base_url: https://fapi.binance.com
+    ws_base_url: wss://fstream.binance.com/ws
+
+quality:
+  email_alert_enabled: true
+  email_recipients:
+    - ops@example.com

@@ -1,0 +1,23 @@
+[program:ym_realtime_ingest]
+directory=/home/<your_user>/quant_system
+command=/home/<your_user>/miniconda3/bin/conda run --no-capture-output -n ym_quant python -m YM_data_collection.apps.run_realtime_ingest --config /home/<your_user>/quant_system/YM_data_collection/config/base.yaml --env dev
+autostart=true
+autorestart=true
+startsecs=5
+stopasgroup=true
+killasgroup=true
+stdout_logfile=/var/log/ym_data_collection/realtime_ingest.log
+stderr_logfile=/var/log/ym_data_collection/realtime_ingest.err.log
+environment=PYTHONUNBUFFERED="1"
+
+[program:ym_data_api]
+directory=/home/<your_user>/quant_system
+command=/home/<your_user>/miniconda3/bin/conda run --no-capture-output -n ym_quant python -m YM_data_collection.apps.run_data_api --config /home/<your_user>/quant_system/YM_data_collection/config/base.yaml --env dev
+autostart=true
+autorestart=true
+startsecs=5
+stopasgroup=true
+killasgroup=true
+stdout_logfile=/var/log/ym_data_collection/data_api.log
+stderr_logfile=/var/log/ym_data_collection/data_api.err.log
+environment=PYTHONUNBUFFERED="1"

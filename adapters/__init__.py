@@ -1,0 +1,1 @@
+"""External venue protocol adapters."""

@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "YM_data_collection"
+version = "0.1.0"
+description = "Industrial-grade personal quant data collection system."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "gus" }
+]
+dependencies = [
+  "fastapi>=0.111,<0.112",
+  "httpx>=0.27,<0.28",
+  "pydantic>=2.7,<2.8",
+  "pydantic-settings>=2.3,<2.4",
+  "PyYAML>=6.0,<6.1",
+  "redis>=5.0,<5.1",
+  "SQLAlchemy>=2.0,<2.1",
+]
+
+[project.scripts]
+ym-data-init-schema = "YM_data_collection.apps.init_mysql_schema:main"
+ym-data-sync-instruments = "YM_data_collection.apps.sync_instruments:main"
+ym-data-sync-klines = "YM_data_collection.apps.run_historical_klines_sync:main"
+ym-data-sync-derivatives = "YM_data_collection.apps.run_historical_derivatives_sync:main"
+ym-data-recovery-sync = "YM_data_collection.apps.run_recovery_sync:main"
+ym-data-resync-range = "YM_data_collection.apps.run_resync_range:main"
+ym-data-realtime-ingest = "YM_data_collection.apps.run_realtime_ingest:main"
+ym-data-api = "YM_data_collection.apps.run_data_api:main"
+ym-data-export = "YM_data_collection.apps.run_export_dataset:main"
+ym-data-quality-check = "YM_data_collection.apps.run_quality_check:main"
+ym-data-cache-consistency = "YM_data_collection.apps.run_cache_consistency_check:main"
+ym-data-service-health = "YM_data_collection.apps.run_service_health_check:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "strict"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["YM_data_collection*"]
