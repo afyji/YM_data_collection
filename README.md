@@ -690,8 +690,10 @@ http://127.0.0.1:18081
 默认 WebSocket 地址：
 
 ```text
-ws://127.0.0.1:8001/ws
+ws://127.0.0.1:18081/ws/v1/marketdata
 ```
+
+说明：当前 FastAPI HTTP 与 WebSocket 运行在同一个 uvicorn 服务端口上；`/ws/v1/marketdata` 是实际注册的 WS endpoint。
 
 ### 13.2 检查 HTTP 服务
 
@@ -721,6 +723,10 @@ curl -H "X-API-Token: dev-api-token" \
 | `GET /api/v1/marketdata/klines/recent` | 最近 N 根 K 线 |
 | `GET /api/v1/marketdata/klines/range` | 区间 K 线查询 |
 | `GET /api/v1/marketdata/snapshot/latest` | 最新综合快照 |
+| `GET /api/v1/marketdata/mark-price/latest` | 最新标记价格 |
+| `GET /api/v1/marketdata/index-price/latest` | 最新指数价格 |
+| `GET /api/v1/marketdata/open-interest/latest` | 最新持仓量 |
+| `GET /api/v1/marketdata/funding-rate/latest` | 最新资金费率 |
 | `GET /api/v1/marketdata/depth/latest` | 最新盘口快照 |
 | `GET /api/v1/marketdata/slippage/estimate` | 滑点估算 |
 
@@ -742,10 +748,19 @@ curl "http://127.0.0.1:18081/api/v1/marketdata/klines/range?venue=binance&market
 curl "http://127.0.0.1:18081/api/v1/marketdata/snapshot/latest?venue=binance&market_type=perp&symbol=BTCUSDT"
 ```
 
+示例：latest 单项行情：
+
+```bash
+curl "http://127.0.0.1:18081/api/v1/marketdata/mark-price/latest?venue=binance&market_type=perp&symbol=BTCUSDT"
+curl "http://127.0.0.1:18081/api/v1/marketdata/index-price/latest?venue=binance&market_type=perp&symbol=BTCUSDT"
+curl "http://127.0.0.1:18081/api/v1/marketdata/open-interest/latest?venue=binance&market_type=perp&symbol=BTCUSDT"
+curl "http://127.0.0.1:18081/api/v1/marketdata/funding-rate/latest?venue=binance&market_type=perp&symbol=BTCUSDT"
+```
+
 示例：滑点估算：
 
 ```bash
-curl "http://127.0.0.1:18081/api/v1/marketdata/slippage/estimate?venue=binance&market_type=perp&symbol=BTCUSDT&side=buy&quantity=1"
+curl "http://127.0.0.1:18081/api/v1/marketdata/slippage/estimate?venue=binance&market_type=perp&symbol=BTCUSDT&side=buy&quote_asset_amount=1000"
 ```
 
 ### 14.2 元数据接口
@@ -761,6 +776,9 @@ curl "http://127.0.0.1:18081/api/v1/marketdata/slippage/estimate?venue=binance&m
 
 ```bash
 curl "http://127.0.0.1:18081/api/v1/metadata/instruments?venue=binance&market_type=perp"
+curl "http://127.0.0.1:18081/api/v1/metadata/coverage?venue=binance&market_type=perp&symbol=BTCUSDT&data_type=kline&interval=1h"
+curl "http://127.0.0.1:18081/api/v1/metadata/status?venue=binance&market_type=perp&symbol=BTCUSDT&data_type=kline&interval=1h"
+curl "http://127.0.0.1:18081/api/v1/metadata/quality-issues?symbol=BTCUSDT&data_type=kline&status_filter=open"
 ```
 
 ### 14.3 系统接口
@@ -777,6 +795,16 @@ curl "http://127.0.0.1:18081/api/v1/metadata/instruments?venue=binance&market_ty
 | `GET /api/v1/datasets/manifests` | 导出文件清单 |
 | `GET /api/v1/datasets/manifests/detail` | 单个导出文件详情 |
 | `GET /api/v1/datasets/download` | 下载导出文件 |
+
+`datasets` 系列统一使用 `manifest_id` 作为外部稳定标识。
+
+示例：
+
+```bash
+curl "http://127.0.0.1:18081/api/v1/datasets/manifests?symbol=BTCUSDT&data_type=kline"
+curl "http://127.0.0.1:18081/api/v1/datasets/manifests/detail?manifest_id=1"
+curl -OJ "http://127.0.0.1:18081/api/v1/datasets/download?manifest_id=1"
+```
 
 ### 14.5 标准响应格式
 
@@ -801,7 +829,7 @@ curl "http://127.0.0.1:18081/api/v1/metadata/instruments?venue=binance&market_ty
 默认地址：
 
 ```text
-ws://127.0.0.1:8001/ws
+ws://127.0.0.1:18081/ws/v1/marketdata
 ```
 
 ### 15.1 订阅消息格式
@@ -1204,7 +1232,7 @@ sudo chown -R $USER:$USER ${LOG_DIR}
 
 也可以先参考仓库里的样例文件：
 
-- [ym_data_collection.conf.example](/Users/gus/data/python/quant_system/YM_data_collection/deploy/supervisor/ym_data_collection.conf.example)
+- [ym_data_collection.conf.example](deploy/supervisor/ym_data_collection.conf.example)
 
 如果你打算直接从样例文件开始，可以先复制一份：
 
