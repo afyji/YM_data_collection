@@ -13,6 +13,17 @@ from YM_data_collection.api.app import create_app
 from YM_data_collection.config.models import DataCollectionConfig
 from YM_data_collection.quality.health_checker import HealthStatus, SystemHealth
 
+# Re-usable IngestCheckpoint-like dict for checkpoint_repo mocking
+def _mock_checkpoint(status="ok", updated_at=None):
+    cp = MagicMock()
+    cp.status = status
+    cp.last_success_at_utc = updated_at or datetime.now(timezone.utc)
+    cp.venue = "binance"
+    cp.market_type = "spot"
+    cp.symbol = "BTCUSDT"
+    cp.data_type = "kline"
+    return cp
+
 
 def _make_config() -> DataCollectionConfig:
     """Build a minimal DataCollectionConfig for testing."""
@@ -203,7 +214,7 @@ class TestHealthCheck:
         assert resp.status_code == 200
 
     def test_health_with_all_healthy(self):
-        """Health endpoint returns all healthy components."""
+        """Health endpoint returns all healthy components in formal shape."""
         config = _make_config()
         checker = _make_healthy_checker()
         app = create_app(config, health_checker=checker)
@@ -212,23 +223,37 @@ class TestHealthCheck:
         body = resp.json()
 
         assert body["success"] is True
-        assert body["data"]["overall_healthy"] is True
-        assert len(body["data"]["components"]) == 3
+        data = body["data"]
+        # Formal overall_status
+        assert data["overall_status"] == "ok"
+        # Backward-compat: overall_healthy still present
+        assert data["overall_healthy"] is True
+        # Backward-compat: components still present
+        assert len(data["components"]) == 3
 
-        mysql = body["data"]["components"][0]
-        assert mysql["component"] == "mysql"
-        assert mysql["healthy"] is True
-        assert mysql["latency_ms"] == 2.3
-        assert mysql["detail"] == "SELECT 1 ok"
+        # Formal component keys
+        assert data["mysql"]["status"] == "ok"
+        assert data["mysql"]["latency_ms"] == 2.3
+        assert data["mysql"]["detail"] == "SELECT 1 ok"
 
-        redis = body["data"]["components"][1]
-        assert redis["component"] == "redis"
-        assert redis["healthy"] is True
+        assert data["cache"]["status"] == "ok"
+        assert data["cache"]["latency_ms"] == 1.1
 
-        assert "checked_at_utc" in body["data"]
+        assert data["http"]["status"] == "ok"
+
+        assert data["ws"]["status"] in ("ok", "disabled")
+        assert "active_connections" in data["ws"]
+
+        assert data["streams"]["status"] == "ok"
+        assert data["streams"]["detail"] == "latest kline age=120s, max=600s"
+
+        assert "checked_at_utc" in data
+        # Meta source
+        assert "meta" in body
+        assert body["meta"].get("source") is not None
 
     def test_health_with_unhealthy_component(self):
-        """Health endpoint reflects unhealthy component."""
+        """Health endpoint reflects unhealthy component in formal shape."""
         config = _make_config()
         checker = _make_unhealthy_checker()
         app = create_app(config, health_checker=checker)
@@ -236,14 +261,20 @@ class TestHealthCheck:
         resp = client.get("/api/v1/system/health")
         body = resp.json()
 
-        assert body["data"]["overall_healthy"] is False
-        redis = body["data"]["components"][1]
+        data = body["data"]
+        # overall_status should be degraded or error when unhealthy
+        assert data["overall_status"] in ("degraded", "error")
+        assert data["overall_healthy"] is False
+        assert data["cache"]["status"] in ("error", "degraded")
+        assert data["cache"]["error"] == "Connection refused"
+        # Backward compat components
+        redis = data["components"][1]
         assert redis["component"] == "redis"
         assert redis["healthy"] is False
         assert redis["error"] == "Connection refused"
 
     def test_health_without_health_checker(self):
-        """Without health_checker, returns basic ok response."""
+        """Without health_checker, returns formal shape with unknown statuses."""
         config = _make_config()
         app = create_app(config)
         client = TestClient(app)
@@ -251,9 +282,22 @@ class TestHealthCheck:
         body = resp.json()
 
         assert body["success"] is True
-        assert body["data"]["overall_healthy"] is True
-        assert body["data"]["components"] == []
-        assert "checked_at_utc" in body["data"]
+        data = body["data"]
+        # Formal keys must exist even without checker
+        assert "overall_status" in data
+        assert data["overall_status"] == "ok"
+        assert data["mysql"]["status"] == "unknown"
+        assert data["cache"]["status"] == "unknown"
+        assert data["http"]["status"] == "ok"
+        assert data["ws"]["status"] in ("ok", "disabled", "unknown")
+        assert "active_connections" in data["ws"]
+        assert data["streams"]["status"] == "unknown"
+        assert "checked_at_utc" in data
+        # Backward compat
+        assert data["overall_healthy"] is True
+        assert "components" in data
+        # Meta source
+        assert "meta" in body
 
 
 # ── Runtime-status endpoint tests ──────────────────────────────────────────
@@ -333,3 +377,122 @@ class TestRuntimeStatus:
         body = resp.json()
 
         assert body["data"]["version"] == "2.3.4"
+
+    # ── Formal DC-T064 additions ─────────────────────────────────────────
+
+    def test_runtime_status_includes_processes(self):
+        """Runtime-status includes processes list with run_data_api."""
+        config = _make_config()
+        app = create_app(config)
+        client = TestClient(app)
+        resp = client.get("/api/v1/system/runtime-status")
+        data = resp.json()["data"]
+
+        assert "processes" in data
+        processes = data["processes"]
+        # run_data_api should be present
+        api_proc = next((p for p in processes if p.get("name") == "run_data_api"), None)
+        assert api_proc is not None
+        assert api_proc["status"] == "running"
+
+    def test_runtime_status_includes_websocket_process(self):
+        """Runtime-status includes websocket process status."""
+        config = _make_config()
+        app = create_app(config)
+        client = TestClient(app)
+        resp = client.get("/api/v1/system/runtime-status")
+        data = resp.json()["data"]
+
+        processes = data["processes"]
+        ws_proc = next((p for p in processes if p.get("name") == "websocket"), None)
+        assert ws_proc is not None
+        assert ws_proc["status"] in ("running", "disabled")
+
+    def test_runtime_status_includes_checkpoint_summary_no_repo(self):
+        """Runtime-status includes checkpoint_summary even without repo."""
+        config = _make_config()
+        app = create_app(config)
+        client = TestClient(app)
+        resp = client.get("/api/v1/system/runtime-status")
+        data = resp.json()["data"]
+
+        assert "checkpoint_summary" in data
+        summary = data["checkpoint_summary"]
+        # Without repo, tracked_streams=0, status unknown
+        assert summary["tracked_streams"] == 0
+        assert summary["status"] == "unknown"
+        assert summary["latest_updated_at_utc"] is None
+
+    def test_runtime_status_checkpoint_summary_with_repo(self):
+        """Runtime-status summarizes checkpoints from repo."""
+        config = _make_config()
+        ok_cp = _mock_checkpoint(status="ok")
+        err_cp = _mock_checkpoint(status="error")
+        repo = MagicMock()
+        repo.list_by_status.side_effect = lambda s: [ok_cp] if s == "ok" else [err_cp]
+
+        app = create_app(config, checkpoint_repo=repo)
+        client = TestClient(app)
+        resp = client.get("/api/v1/system/runtime-status")
+        data = resp.json()["data"]
+
+        summary = data["checkpoint_summary"]
+        assert summary["tracked_streams"] == 2  # 1 ok + 1 error
+        assert summary["ok_count"] == 1
+        assert summary["error_count"] == 1
+        assert summary["status"] == "degraded"  # has errors but some ok
+        assert summary["latest_updated_at_utc"] is not None
+
+    def test_runtime_status_checkpoint_summary_all_ok(self):
+        """Runtime-status checkpoint_summary all-ok."""
+        config = _make_config()
+        ok_cp = _mock_checkpoint(status="ok")
+        repo = MagicMock()
+        repo.list_by_status.side_effect = lambda s: [ok_cp, ok_cp] if s == "ok" else []
+
+        app = create_app(config, checkpoint_repo=repo)
+        client = TestClient(app)
+        resp = client.get("/api/v1/system/runtime-status")
+        data = resp.json()["data"]
+
+        summary = data["checkpoint_summary"]
+        assert summary["tracked_streams"] == 2
+        assert summary["ok_count"] == 2
+        assert summary["error_count"] == 0
+        assert summary["status"] == "ok"
+
+    def test_runtime_status_checkpoint_summary_repo_exception(self):
+        """Runtime-status handles repo exceptions gracefully."""
+        config = _make_config()
+        repo = MagicMock()
+        repo.list_by_status.side_effect = Exception("DB down")
+
+        app = create_app(config, checkpoint_repo=repo)
+        client = TestClient(app)
+        resp = client.get("/api/v1/system/runtime-status")
+        data = resp.json()["data"]
+
+        summary = data["checkpoint_summary"]
+        assert summary["status"] == "error"
+        assert summary["tracked_streams"] == 0
+
+    def test_runtime_status_includes_checked_at_utc(self):
+        """Runtime-status includes checked_at_utc."""
+        config = _make_config()
+        app = create_app(config)
+        client = TestClient(app)
+        resp = client.get("/api/v1/system/runtime-status")
+        data = resp.json()["data"]
+
+        assert "checked_at_utc" in data
+
+    def test_runtime_status_includes_meta_source(self):
+        """Runtime-status includes meta.source."""
+        config = _make_config()
+        app = create_app(config)
+        client = TestClient(app)
+        resp = client.get("/api/v1/system/runtime-status")
+        body = resp.json()
+
+        assert "meta" in body
+        assert body["meta"].get("source") is not None

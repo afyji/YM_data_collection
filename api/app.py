@@ -52,6 +52,7 @@ def create_app(
     app.state.checkpoint_repo = checkpoint_repo
     app.state.health_checker = health_checker
     app.state.start_time_utc = datetime.now(timezone.utc)
+    app.state.config = config
 
     # ── Middleware ──────────────────────────────────────────────────────
     if config.service.request_id_enabled:

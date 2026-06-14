@@ -86,6 +86,54 @@ async def snapshot_latest(
     return ok_response(data=combined_data, meta=combined_meta)
 
 
+@router.get("/mark-price/latest")
+async def mark_price_latest(
+    venue: str = Query(..., description="Exchange venue identifier"),
+    market_type: str = Query(..., description="Market type, e.g. perp"),
+    symbol: str = Query(..., description="Trading symbol, e.g. BTCUSDT"),
+    query_service: MarketDataQueryService = Depends(get_query_service),
+):
+    """Return the latest mark-price snapshot for a symbol."""
+    result = query_service.query_latest_snapshot(market_type, symbol, "mark_price")
+    return ok_response(data=result["data"], meta=result["meta"])
+
+
+@router.get("/index-price/latest")
+async def index_price_latest(
+    venue: str = Query(..., description="Exchange venue identifier"),
+    market_type: str = Query(..., description="Market type, e.g. perp"),
+    symbol: str = Query(..., description="Trading symbol, e.g. BTCUSDT"),
+    query_service: MarketDataQueryService = Depends(get_query_service),
+):
+    """Return the latest index-price snapshot for a symbol."""
+    result = query_service.query_latest_snapshot(market_type, symbol, "index_price")
+    return ok_response(data=result["data"], meta=result["meta"])
+
+
+@router.get("/open-interest/latest")
+async def open_interest_latest(
+    venue: str = Query(..., description="Exchange venue identifier"),
+    market_type: str = Query(..., description="Market type, e.g. perp"),
+    symbol: str = Query(..., description="Trading symbol, e.g. BTCUSDT"),
+    query_service: MarketDataQueryService = Depends(get_query_service),
+):
+    """Return the latest open-interest snapshot for a symbol."""
+    result = query_service.query_latest_snapshot(market_type, symbol, "open_interest")
+    return ok_response(data=result["data"], meta=result["meta"])
+
+
+@router.get("/funding-rate/latest")
+async def funding_rate_latest(
+    venue: str = Query(..., description="Exchange venue identifier"),
+    market_type: str = Query(..., description="Market type, e.g. perp"),
+    symbol: str = Query(..., description="Trading symbol, e.g. BTCUSDT"),
+    query_service: MarketDataQueryService = Depends(get_query_service),
+):
+    """Return the latest funding-rate snapshot for a symbol."""
+    result = query_service.query_latest_snapshot(market_type, symbol, "funding_rate")
+    return ok_response(data=result["data"], meta=result["meta"])
+
+
 @router.get("/depth/latest")
 async def depth_latest(
     venue: str = Query(..., description="Exchange venue identifier"),

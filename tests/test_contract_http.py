@@ -221,8 +221,9 @@ def _make_quality_issue(symbol: str = "BTCUSDT") -> DataQualityIssue:
     )
 
 
-def _make_manifest(symbol: str = "BTCUSDT") -> FileManifest:
+def _make_manifest(symbol: str = "BTCUSDT", id: int | None = 1) -> FileManifest:
     return FileManifest(
+        id=id,
         dataset_name="kline_spot",
         venue="binance",
         market_type="spot",
@@ -283,11 +284,21 @@ def _make_query_service() -> MagicMock:
         "meta": {"source": "mysql", "fallback_used": False, "cache_refreshed": False},
     }
 
-    # Snapshot data
-    svc.query_latest_snapshot.return_value = {
-        "data": {"price": "42000.50"},
-        "meta": {"source": "cache", "fallback_used": False, "cache_refreshed": False},
+    # Snapshot data — return different shapes based on data_type for individual endpoints
+    _snapshot_results = {
+        "mark_price": {"data": {"price": "42000.50"}, "meta": {"source": "cache", "fallback_used": False, "cache_refreshed": False}},
+        "index_price": {"data": {"price": "41950.25"}, "meta": {"source": "cache", "fallback_used": False, "cache_refreshed": False}},
+        "open_interest": {"data": {"value": "12345.5"}, "meta": {"source": "cache", "fallback_used": False, "cache_refreshed": False}},
+        "funding_rate": {"data": {"rate": "0.0001"}, "meta": {"source": "cache", "fallback_used": False, "cache_refreshed": False}},
     }
+
+    def _snapshot_side_effect(market_type, symbol, data_type):
+        return _snapshot_results.get(
+            data_type,
+            {"data": {"price": "42000.50"}, "meta": {"source": "cache", "fallback_used": False, "cache_refreshed": False}},
+        )
+
+    svc.query_latest_snapshot.side_effect = _snapshot_side_effect
 
     # Depth data — DepthLevel is [string, string] per contract
     svc.query_latest_depth.return_value = {
@@ -355,8 +366,15 @@ def _make_quality_repo() -> MagicMock:
 
 def _make_manifest_repo() -> MagicMock:
     repo = MagicMock()
-    repo.list_by_dataset.return_value = [_make_manifest("BTCUSDT")]
-    repo.list_by_symbol.return_value = [_make_manifest("BTCUSDT")]
+    manifest = _make_manifest("BTCUSDT")
+    repo.list_by_dataset.return_value = [manifest]
+    repo.list_by_symbol.return_value = [manifest]
+    # get_by_id returns the manifest for id=1; None for unknown ids
+    def _get_by_id(manifest_id):
+        if manifest_id == 1:
+            return manifest
+        return None
+    repo.get_by_id.side_effect = _get_by_id
     return repo
 
 
@@ -706,7 +724,7 @@ class TestContractCoverage:
 
 
 class TestContractStatus:
-    """Contract: success + data with checkpoint info."""
+    """Contract: success + flattened data with identity, status, and checkpoint."""
 
     def test_envelope_and_shape(self, client):
         resp = client.get(
@@ -726,15 +744,20 @@ class TestContractStatus:
 
         data = body["data"]
         assert isinstance(data, dict)
-        assert "checkpoint" in data
 
-        # Checkpoint sub-object has required fields
+        # Top-level identity and status fields
+        assert data["venue"] == "binance"
+        assert data["market_type"] == "spot"
+        assert data["symbol"] == "BTCUSDT"
+        assert data["data_type"] == "kline"
+        assert "status" in data
+        assert "last_success_at_utc" in data
+        assert "last_error_message" in data
+
+        # Checkpoint sub-object has remaining fields
+        assert "checkpoint" in data
         cp = data["checkpoint"]
-        assert "venue" in cp
-        assert "market_type" in cp
-        assert "symbol" in cp
-        assert "data_type" in cp
-        assert "status" in cp
+        assert "last_event_ts_ms" in cp
 
         # meta has source
         assert "source" in body["meta"]
@@ -814,6 +837,7 @@ class TestContractManifests:
         # Verify manifest item shape
         if body["data"]["items"]:
             item = body["data"]["items"][0]
+            assert "manifest_id" in item
             assert "dataset_name" in item
             assert "venue" in item
             assert "symbol" in item
@@ -884,3 +908,334 @@ class TestContractRuntimeStatus:
         # ws_connections
         assert "ws_connections" in data
         assert isinstance(data["ws_connections"], int)
+
+
+# ===========================================================================
+# DC-T065: Contract smoke tests for 4 new latest endpoints (6-9)
+# ===========================================================================
+
+
+class TestContractMarkPriceLatest:
+    """Contract: GET /api/v1/marketdata/mark-price/latest returns envelope with data + meta."""
+
+    def test_envelope_and_shape(self, client):
+        resp = client.get(
+            "/api/v1/marketdata/mark-price/latest",
+            params={
+                "venue": "binance",
+                "market_type": "perp",
+                "symbol": "BTCUSDT",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+
+        _assert_envelope(body)
+        assert body["success"] is True
+
+        # data is a dict with price key (or null)
+        data = body["data"]
+        assert isinstance(data, dict)
+        assert "price" in data
+
+        # meta has source
+        assert "source" in body["meta"]
+
+
+class TestContractIndexPriceLatest:
+    """Contract: GET /api/v1/marketdata/index-price/latest returns envelope with data + meta."""
+
+    def test_envelope_and_shape(self, client):
+        resp = client.get(
+            "/api/v1/marketdata/index-price/latest",
+            params={
+                "venue": "binance",
+                "market_type": "perp",
+                "symbol": "BTCUSDT",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+
+        _assert_envelope(body)
+        assert body["success"] is True
+
+        data = body["data"]
+        assert isinstance(data, dict)
+        assert "price" in data
+
+        assert "source" in body["meta"]
+
+
+class TestContractOpenInterestLatest:
+    """Contract: GET /api/v1/marketdata/open-interest/latest returns envelope with data + meta."""
+
+    def test_envelope_and_shape(self, client):
+        resp = client.get(
+            "/api/v1/marketdata/open-interest/latest",
+            params={
+                "venue": "binance",
+                "market_type": "perp",
+                "symbol": "BTCUSDT",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+
+        _assert_envelope(body)
+        assert body["success"] is True
+
+        data = body["data"]
+        assert isinstance(data, dict)
+        # open_interest uses 'value' key
+        assert "value" in data
+
+        assert "source" in body["meta"]
+
+
+class TestContractFundingRateLatest:
+    """Contract: GET /api/v1/marketdata/funding-rate/latest returns envelope with data + meta."""
+
+    def test_envelope_and_shape(self, client):
+        resp = client.get(
+            "/api/v1/marketdata/funding-rate/latest",
+            params={
+                "venue": "binance",
+                "market_type": "perp",
+                "symbol": "BTCUSDT",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+
+        _assert_envelope(body)
+        assert body["success"] is True
+
+        data = body["data"]
+        assert isinstance(data, dict)
+        # funding_rate uses 'rate' key
+        assert "rate" in data
+
+        assert "source" in body["meta"]
+
+
+# ===========================================================================
+# DC-T065: Contract smoke tests for datasets/manifests/detail (17)
+# ===========================================================================
+
+
+class TestContractManifestsDetail:
+    """Contract: GET /api/v1/datasets/manifests/detail returns envelope with data + meta."""
+
+    def test_envelope_and_shape(self, client):
+        resp = client.get(
+            "/api/v1/datasets/manifests/detail",
+            params={"manifest_id": 1},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+
+        _assert_envelope(body)
+        assert body["success"] is True
+
+        data = body["data"]
+        assert isinstance(data, dict)
+        assert "manifest_id" in data
+        assert "dataset_name" in data
+        assert "symbol" in data
+        assert "status" in data
+
+        assert "source" in body["meta"]
+
+
+# ===========================================================================
+# DC-T065: Contract smoke test for datasets/download (18)
+# ===========================================================================
+
+
+class TestContractDatasetsDownload:
+    """Contract: GET /api/v1/datasets/download returns binary file or error JSON.
+
+    Since the mock manifest has a file_path that does not exist on disk,
+    the endpoint returns a JSON error envelope (file not found on disk).
+    This is sufficient to verify the route is registered and responds correctly.
+    """
+
+    def test_manifest_not_found_returns_error_envelope(self, client):
+        resp = client.get(
+            "/api/v1/datasets/download",
+            params={"manifest_id": 999},
+        )
+        assert resp.status_code == 404
+        body = resp.json()
+        assert body["success"] is False
+        assert body["code"] == "NOT_FOUND"
+
+    def test_manifest_found_but_file_missing_returns_error_envelope(self, client):
+        """Manifest exists in repo, but the file_path does not exist on disk -> 404 JSON."""
+        resp = client.get(
+            "/api/v1/datasets/download",
+            params={"manifest_id": 1},
+        )
+        assert resp.status_code == 404
+        body = resp.json()
+        assert body["success"] is False
+        assert body["code"] == "NOT_FOUND"
+
+
+# ===========================================================================
+# DC-T065: Authoritative first-phase HTTP endpoint list & coverage matrix
+# ===========================================================================
+
+FIRST_PHASE_HTTP_ENDPOINTS: list[tuple[str, str]] = [
+    # (method, path) — authoritative list per 19_第一阶段正式API补完与契约对齐.md
+    ("GET", "/api/v1/marketdata/klines/recent"),
+    ("GET", "/api/v1/marketdata/klines/range"),
+    ("GET", "/api/v1/marketdata/snapshot/latest"),
+    ("GET", "/api/v1/marketdata/depth/latest"),
+    ("GET", "/api/v1/marketdata/slippage/estimate"),
+    ("GET", "/api/v1/marketdata/mark-price/latest"),
+    ("GET", "/api/v1/marketdata/index-price/latest"),
+    ("GET", "/api/v1/marketdata/open-interest/latest"),
+    ("GET", "/api/v1/marketdata/funding-rate/latest"),
+    ("GET", "/api/v1/metadata/instruments"),
+    ("GET", "/api/v1/metadata/coverage"),
+    ("GET", "/api/v1/metadata/status"),
+    ("GET", "/api/v1/metadata/quality-issues"),
+    ("GET", "/api/v1/system/health"),
+    ("GET", "/api/v1/system/runtime-status"),
+    ("GET", "/api/v1/datasets/manifests"),
+    ("GET", "/api/v1/datasets/manifests/detail"),
+    ("GET", "/api/v1/datasets/download"),
+]
+
+
+def _collect_app_routes(app) -> set[tuple[str, str]]:
+    """Collect (method, path) from a FastAPI app's routes."""
+    routes: set[tuple[str, str]] = set()
+    for route in app.routes:
+        # APIRoute has methods; Mount does not
+        if hasattr(route, "methods") and hasattr(route, "path"):
+            for method in route.methods:
+                if method in ("GET", "POST", "PUT", "DELETE", "PATCH"):
+                    routes.add((method, route.path))
+        # Recurse into mounts
+        if hasattr(route, "routes"):
+            routes |= _collect_app_routes_from_list(route.routes)
+    return routes
+
+
+def _collect_app_routes_from_list(route_list) -> set[tuple[str, str]]:
+    """Collect (method, path) from a list of route objects."""
+    routes: set[tuple[str, str]] = set()
+    for route in route_list:
+        if hasattr(route, "methods") and hasattr(route, "path"):
+            for method in route.methods:
+                if method in ("GET", "POST", "PUT", "DELETE", "PATCH"):
+                    routes.add((method, route.path))
+        if hasattr(route, "routes"):
+            routes |= _collect_app_routes_from_list(route.routes)
+    return routes
+
+
+class TestCoverageMatrixRouteRegistration:
+    """Every endpoint in FIRST_PHASE_HTTP_ENDPOINTS must be registered in the FastAPI app."""
+
+    def test_all_formal_endpoints_registered_in_app(self, client):
+        app = client.app  # type: ignore[attr-defined]
+        registered = _collect_app_routes(app)
+
+        missing = []
+        for method, path in FIRST_PHASE_HTTP_ENDPOINTS:
+            if (method, path) not in registered:
+                missing.append(f"{method} {path}")
+
+        assert not missing, (
+            f"Missing routes in FastAPI app: {missing}\n"
+            f"Registered: {sorted(registered)}"
+        )
+
+
+class TestCoverageMatrixOpenAPI:
+    """Every endpoint in FIRST_PHASE_HTTP_ENDPOINTS must exist in the OpenAPI draft."""
+
+    def test_all_formal_endpoints_in_openapi_draft(self):
+        import yaml
+        from pathlib import Path
+
+        openapi_path = Path(
+            "/mnt/mac_quant_system/docs/01_data_collection_system/17_http_openapi_draft.yaml"
+        )
+        with open(openapi_path) as f:
+            spec = yaml.safe_load(f)
+
+        paths = spec.get("paths", {})
+
+        missing = []
+        for method, path in FIRST_PHASE_HTTP_ENDPOINTS:
+            if path not in paths:
+                missing.append(f"{method} {path}")
+            else:
+                path_item = paths[path]
+                if method.lower() not in path_item:
+                    missing.append(f"{method} {path} (method missing)")
+
+        assert not missing, (
+            f"Missing endpoints in OpenAPI draft: {missing}\n"
+            f"Draft paths: {sorted(paths.keys())}"
+        )
+
+
+# Mapping: formal endpoint -> contract test class name in this file
+_CONTRACT_TEST_MAP: dict[str, str] = {
+    "GET /api/v1/marketdata/klines/recent": "TestContractKlinesRecent",
+    "GET /api/v1/marketdata/klines/range": "TestContractKlinesRange",
+    "GET /api/v1/marketdata/snapshot/latest": "TestContractSnapshotLatest",
+    "GET /api/v1/marketdata/depth/latest": "TestContractDepthLatest",
+    "GET /api/v1/marketdata/slippage/estimate": "TestContractSlippageEstimate",
+    "GET /api/v1/marketdata/mark-price/latest": "TestContractMarkPriceLatest",
+    "GET /api/v1/marketdata/index-price/latest": "TestContractIndexPriceLatest",
+    "GET /api/v1/marketdata/open-interest/latest": "TestContractOpenInterestLatest",
+    "GET /api/v1/marketdata/funding-rate/latest": "TestContractFundingRateLatest",
+    "GET /api/v1/metadata/instruments": "TestContractInstruments",
+    "GET /api/v1/metadata/coverage": "TestContractCoverage",
+    "GET /api/v1/metadata/status": "TestContractStatus",
+    "GET /api/v1/metadata/quality-issues": "TestContractQualityIssues",
+    "GET /api/v1/system/health": "TestContractSystemHealth",
+    "GET /api/v1/system/runtime-status": "TestContractRuntimeStatus",
+    "GET /api/v1/datasets/manifests": "TestContractManifests",
+    "GET /api/v1/datasets/manifests/detail": "TestContractManifestsDetail",
+    "GET /api/v1/datasets/download": "TestContractDatasetsDownload",
+}
+
+
+class TestCoverageMatrixContractTests:
+    """No formal endpoint may be silently missing from the contract test matrix."""
+
+    def test_every_formal_endpoint_has_contract_test_entry(self):
+        """Every endpoint in FIRST_PHASE_HTTP_ENDPOINTS must have a _CONTRACT_TEST_MAP entry."""
+        formal_keys = {f"{m} {p}" for m, p in FIRST_PHASE_HTTP_ENDPOINTS}
+        covered_keys = set(_CONTRACT_TEST_MAP.keys())
+        missing = formal_keys - covered_keys
+        assert not missing, (
+            f"Endpoints missing from _CONTRACT_TEST_MAP: {sorted(missing)}\n"
+            f"Add a contract test class and register it in _CONTRACT_TEST_MAP."
+        )
+
+    def test_contract_test_classes_exist_in_module(self):
+        """Every class referenced in _CONTRACT_TEST_MAP must exist in this module."""
+        import sys
+
+        module = sys.modules[__name__]
+        for key, class_name in _CONTRACT_TEST_MAP.items():
+            assert hasattr(module, class_name), (
+                f"Contract test class {class_name} for {key} not found in {__name__}"
+            )
+
+    def test_no_stale_entries_in_contract_test_map(self):
+        """_CONTRACT_TEST_MAP should not reference endpoints not in the formal list."""
+        formal_keys = {f"{m} {p}" for m, p in FIRST_PHASE_HTTP_ENDPOINTS}
+        stale = set(_CONTRACT_TEST_MAP.keys()) - formal_keys
+        assert not stale, (
+            f"Stale entries in _CONTRACT_TEST_MAP (not in formal list): {sorted(stale)}"
+        )

@@ -318,3 +318,207 @@ class TestMissingParams:
             params={"venue": "binance", "symbol": "BTCUSDT"},
         )
         assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Tests: GET /api/v1/marketdata/mark-price/latest
+# ---------------------------------------------------------------------------
+
+class TestMarkPriceLatest:
+    """Tests for the mark-price latest endpoint (DC-T061)."""
+
+    def test_calls_query_latest_snapshot_with_mark_price(self):
+        svc = MagicMock()
+        svc.query_latest_snapshot.return_value = _make_cache_result({"price": 42000.0})
+
+        app = _create_app(svc)
+        client = TestClient(app)
+
+        resp = client.get(
+            "/api/v1/marketdata/mark-price/latest",
+            params={"venue": "binance", "market_type": "perp", "symbol": "BTCUSDT"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+        assert body["data"] == {"price": 42000.0}
+        assert body["meta"]["source"] == "cache"
+        assert body["meta"]["fallback_used"] is False
+
+        svc.query_latest_snapshot.assert_called_once_with("perp", "BTCUSDT", "mark_price")
+
+    def test_no_data_returns_success_with_null(self):
+        svc = MagicMock()
+        svc.query_latest_snapshot.return_value = _make_none_result()
+
+        app = _create_app(svc)
+        client = TestClient(app)
+
+        resp = client.get(
+            "/api/v1/marketdata/mark-price/latest",
+            params={"venue": "binance", "market_type": "perp", "symbol": "UNKNOWN"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+        assert body["data"] is None
+        assert body["meta"]["source"] == "none"
+
+
+# ---------------------------------------------------------------------------
+# Tests: GET /api/v1/marketdata/index-price/latest
+# ---------------------------------------------------------------------------
+
+class TestIndexPriceLatest:
+    """Tests for the index-price latest endpoint (DC-T061)."""
+
+    def test_calls_query_latest_snapshot_with_index_price(self):
+        svc = MagicMock()
+        svc.query_latest_snapshot.return_value = _make_cache_result({"price": 41950.0})
+
+        app = _create_app(svc)
+        client = TestClient(app)
+
+        resp = client.get(
+            "/api/v1/marketdata/index-price/latest",
+            params={"venue": "binance", "market_type": "perp", "symbol": "BTCUSDT"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+        assert body["data"] == {"price": 41950.0}
+        assert body["meta"]["source"] == "cache"
+
+        svc.query_latest_snapshot.assert_called_once_with("perp", "BTCUSDT", "index_price")
+
+    def test_no_data_returns_success_with_null(self):
+        svc = MagicMock()
+        svc.query_latest_snapshot.return_value = _make_none_result()
+
+        app = _create_app(svc)
+        client = TestClient(app)
+
+        resp = client.get(
+            "/api/v1/marketdata/index-price/latest",
+            params={"venue": "binance", "market_type": "perp", "symbol": "UNKNOWN"},
+        )
+        body = resp.json()
+        assert body["success"] is True
+        assert body["data"] is None
+        assert body["meta"]["source"] == "none"
+
+
+# ---------------------------------------------------------------------------
+# Tests: GET /api/v1/marketdata/open-interest/latest
+# ---------------------------------------------------------------------------
+
+class TestOpenInterestLatest:
+    """Tests for the open-interest latest endpoint (DC-T061)."""
+
+    def test_calls_query_latest_snapshot_with_open_interest(self):
+        svc = MagicMock()
+        svc.query_latest_snapshot.return_value = _make_cache_result({"value": 12345.5})
+
+        app = _create_app(svc)
+        client = TestClient(app)
+
+        resp = client.get(
+            "/api/v1/marketdata/open-interest/latest",
+            params={"venue": "binance", "market_type": "perp", "symbol": "BTCUSDT"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+        assert body["data"] == {"value": 12345.5}
+        assert body["meta"]["source"] == "cache"
+
+        svc.query_latest_snapshot.assert_called_once_with("perp", "BTCUSDT", "open_interest")
+
+    def test_no_data_returns_success_with_null(self):
+        svc = MagicMock()
+        svc.query_latest_snapshot.return_value = _make_none_result()
+
+        app = _create_app(svc)
+        client = TestClient(app)
+
+        resp = client.get(
+            "/api/v1/marketdata/open-interest/latest",
+            params={"venue": "binance", "market_type": "perp", "symbol": "UNKNOWN"},
+        )
+        body = resp.json()
+        assert body["success"] is True
+        assert body["data"] is None
+        assert body["meta"]["source"] == "none"
+
+
+# ---------------------------------------------------------------------------
+# Tests: GET /api/v1/marketdata/funding-rate/latest
+# ---------------------------------------------------------------------------
+
+class TestFundingRateLatest:
+    """Tests for the funding-rate latest endpoint (DC-T061)."""
+
+    def test_calls_query_latest_snapshot_with_funding_rate(self):
+        svc = MagicMock()
+        svc.query_latest_snapshot.return_value = _make_cache_result({"rate": 0.0001})
+
+        app = _create_app(svc)
+        client = TestClient(app)
+
+        resp = client.get(
+            "/api/v1/marketdata/funding-rate/latest",
+            params={"venue": "binance", "market_type": "perp", "symbol": "BTCUSDT"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+        assert body["data"] == {"rate": 0.0001}
+        assert body["meta"]["source"] == "cache"
+
+        svc.query_latest_snapshot.assert_called_once_with("perp", "BTCUSDT", "funding_rate")
+
+    def test_no_data_returns_success_with_null(self):
+        svc = MagicMock()
+        svc.query_latest_snapshot.return_value = _make_none_result()
+
+        app = _create_app(svc)
+        client = TestClient(app)
+
+        resp = client.get(
+            "/api/v1/marketdata/funding-rate/latest",
+            params={"venue": "binance", "market_type": "perp", "symbol": "UNKNOWN"},
+        )
+        body = resp.json()
+        assert body["success"] is True
+        assert body["data"] is None
+        assert body["meta"]["source"] == "none"
+
+
+# ---------------------------------------------------------------------------
+# Tests: Missing required params for single-data-type endpoints (DC-T061)
+# ---------------------------------------------------------------------------
+
+class TestSingleDataTypeMissingParams:
+    """Ensure required query params are validated for single-data-type endpoints."""
+
+    def test_mark_price_missing_symbol_returns_422(self):
+        svc = MagicMock()
+        app = _create_app(svc)
+        client = TestClient(app)
+
+        resp = client.get(
+            "/api/v1/marketdata/mark-price/latest",
+            params={"venue": "binance", "market_type": "perp"},
+        )
+        assert resp.status_code == 422
+
+    def test_funding_rate_missing_market_type_returns_422(self):
+        svc = MagicMock()
+        app = _create_app(svc)
+        client = TestClient(app)
+
+        resp = client.get(
+            "/api/v1/marketdata/funding-rate/latest",
+            params={"venue": "binance", "symbol": "BTCUSDT"},
+        )
+        assert resp.status_code == 422

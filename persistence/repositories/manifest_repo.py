@@ -51,10 +51,16 @@ _LIST_BY_SYMBOL_ONLY_SQL = text(
     f"ORDER BY start_ts_ms"
 )
 
+_GET_BY_ID_SQL = text(
+    f"SELECT id, {_MANIFEST_FIELDS} FROM file_manifests "
+    f"WHERE id = :id"
+)
+
 
 def _row_to_manifest(row: tuple) -> FileManifest:
     """Map a result row to a FileManifest domain object."""
     return FileManifest(
+        id=row[0],
         dataset_name=row[1],
         venue=row[2],
         market_type=row[3],
@@ -146,3 +152,13 @@ class ManifestRepository:
                     {"symbol": symbol},
                 ).fetchall()
             return [_row_to_manifest(r) for r in rows]
+
+    def get_by_id(self, manifest_id: int) -> Optional[FileManifest]:
+        """Fetch a manifest by its primary key id."""
+        with session_scope(self._session_factory) as session:
+            row = session.execute(
+                _GET_BY_ID_SQL, {"id": manifest_id}
+            ).fetchone()
+            if row is None:
+                return None
+            return _row_to_manifest(row)

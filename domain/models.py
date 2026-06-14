@@ -152,6 +152,8 @@ class DataQualityIssue(BaseModel):
 
 class FileManifest(BaseModel):
     """Exported dataset file manifest."""
+
+    id: Optional[int] = None
     dataset_name: str
     venue: str
     market_type: str

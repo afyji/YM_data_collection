@@ -232,3 +232,18 @@ class TestManifestRepository:
         assert result.version == mf.version
         assert result.generated_by == mf.generated_by
         assert result.status == mf.status
+
+    def test_get_by_id_found(self, repo):
+        mf = _make_manifest()
+        row_id = repo.insert(mf)
+        assert row_id is not None
+
+        result = repo.get_by_id(row_id)
+        assert result is not None
+        assert result.id == row_id
+        assert result.dataset_name == mf.dataset_name
+        assert result.symbol == mf.symbol
+
+    def test_get_by_id_not_found(self, repo):
+        result = repo.get_by_id(999999)
+        assert result is None
