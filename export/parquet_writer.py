@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +12,7 @@ import pandas as pd
 from sqlalchemy.orm import Session, sessionmaker
 
 from YM_data_collection.domain.models import FileManifest
+from YM_data_collection.persistence.datetime_utils import utc_now_sql
 from YM_data_collection.persistence.repositories.manifest_repo import (
     ManifestRepository,
 )
@@ -239,7 +239,7 @@ class DatasetExporter:
             content_hash=content_hash,
             version=version_int,
             generated_by="run_export_dataset",
-            generated_at_utc=datetime.now(timezone.utc).replace(tzinfo=None),
+            generated_at_utc=utc_now_sql(),
             status="ready",
         )
 

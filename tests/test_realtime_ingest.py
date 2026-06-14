@@ -332,8 +332,12 @@ class TestRunAsync:
             mock_engine_instance = MagicMock()
             mock_engine.return_value = mock_engine_instance
 
-            # Mock WS manager
-            mock_ws = AsyncMock()
+            # Mock WS manager: on_message is sync; connection methods are async.
+            mock_ws = MagicMock()
+            mock_ws.connect = AsyncMock()
+            mock_ws.subscribe = AsyncMock()
+            mock_ws.run_forever = AsyncMock()
+            mock_ws.close = AsyncMock()
             mock_ws_cls.return_value = mock_ws
 
             # Mock flush worker
@@ -393,7 +397,11 @@ class TestRunAsync:
 
             mock_engine.return_value = MagicMock()
 
-            mock_ws = AsyncMock()
+            mock_ws = MagicMock()
+            mock_ws.connect = AsyncMock()
+            mock_ws.subscribe = AsyncMock()
+            mock_ws.run_forever = AsyncMock()
+            mock_ws.close = AsyncMock()
             mock_ws_cls.return_value = mock_ws
 
             mock_flush = AsyncMock()

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
 from YM_data_collection.domain.models import DataQualityIssue
+from YM_data_collection.persistence.datetime_utils import normalize_sql_params, utc_now_sql
 from YM_data_collection.persistence.mysql import session_scope
 
 
@@ -96,7 +96,7 @@ class QualityIssueRepository:
             "resolved_at_utc": None,
         }
         with session_scope(self._session_factory) as session:
-            result = session.execute(_INSERT_SQL, params)
+            result = session.execute(_INSERT_SQL, normalize_sql_params(params))
             return result.lastrowid
 
     def list_by_symbol(
@@ -128,9 +128,8 @@ class QualityIssueRepository:
 
     def resolve(self, id: int, resolution_note: str) -> None:
         """Mark an issue as resolved with a resolution note."""
-        now = datetime.now(timezone.utc)
         with session_scope(self._session_factory) as session:
             session.execute(
                 _RESOLVE_SQL,
-                {"id": id, "resolution_note": resolution_note, "resolved_at_utc": now},
+                {"id": id, "resolution_note": resolution_note, "resolved_at_utc": utc_now_sql()},
             )

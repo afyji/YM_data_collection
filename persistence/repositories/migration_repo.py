@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
+from YM_data_collection.persistence.datetime_utils import utc_now_sql
 from YM_data_collection.persistence.mysql import session_scope
 
 
@@ -45,8 +46,7 @@ class SchemaMigrationRepository:
         status: str,
     ) -> None:
         """Insert a migration execution record."""
-        # Store naive UTC datetime for cross-dialect compatibility
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = utc_now_sql()
 
         with session_scope(self._session_factory) as session:
             session.execute(

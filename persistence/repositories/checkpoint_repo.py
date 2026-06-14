@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
 from YM_data_collection.domain.models import IngestCheckpoint
+from YM_data_collection.persistence.datetime_utils import normalize_sql_params, utc_now_sql
 from YM_data_collection.persistence.mysql import session_scope
 
 
@@ -101,7 +101,6 @@ class CheckpointRepository:
         MySQL and SQLite.  The operation is atomic within the session
         transaction.
         """
-        now = datetime.now(timezone.utc)
         params = {
             "venue": checkpoint.venue,
             "market_type": checkpoint.market_type,
@@ -115,8 +114,9 @@ class CheckpointRepository:
             "status": checkpoint.status,
             "last_success_at_utc": checkpoint.last_success_at_utc,
             "last_error_message": checkpoint.last_error_message,
-            "updated_at_utc": now,
+            "updated_at_utc": utc_now_sql(),
         }
+        params = normalize_sql_params(params)
         with session_scope(self._session_factory) as session:
             exists = session.execute(_EXISTS_SQL, params).fetchone()
             if exists:

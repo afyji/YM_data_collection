@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
 from YM_data_collection.domain.models import FileManifest
+from YM_data_collection.persistence.datetime_utils import normalize_sql_params
 from YM_data_collection.persistence.mysql import session_scope
 
 
@@ -106,7 +107,7 @@ class ManifestRepository:
             "status": manifest.status,
         }
         with session_scope(self._session_factory) as session:
-            result = session.execute(_INSERT_SQL, params)
+            result = session.execute(_INSERT_SQL, normalize_sql_params(params))
             return result.lastrowid
 
     def get_by_path(self, file_path: str) -> Optional[FileManifest]:

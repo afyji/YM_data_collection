@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List, Optional
 
@@ -10,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
 from YM_data_collection.domain.models import InstrumentInfo
+from YM_data_collection.persistence.datetime_utils import utc_now_sql
 from YM_data_collection.persistence.mysql import session_scope
 
 
@@ -32,8 +32,7 @@ class InstrumentRepository:
         On MySQL uses ``INSERT … ON DUPLICATE KEY UPDATE``.
         On SQLite uses ``INSERT … ON CONFLICT … DO UPDATE``.
         """
-        # Store naive UTC datetime for cross-dialect compatibility
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = utc_now_sql()
 
         with session_scope(self._session_factory) as session:
             bind = session.get_bind()

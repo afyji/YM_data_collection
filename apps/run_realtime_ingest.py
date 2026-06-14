@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import inspect
 import signal
 import sys
 
@@ -263,13 +264,21 @@ async def run_async(args: argparse.Namespace) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
+    coro = None
     try:
         args = parser.parse_args(argv)
-        asyncio.run(run_async(args))
+        coro = run_async(args)
+        asyncio.run(coro)
+        if inspect.getcoroutinestate(coro) == inspect.CORO_CREATED:
+            coro.close()
         return emit_final_status(APP_NAME, ExitCode.SUCCESS, "Realtime ingest stopped gracefully")
     except CliConfigError as exc:
+        if coro is not None and inspect.getcoroutinestate(coro) == inspect.CORO_CREATED:
+            coro.close()
         return emit_final_status(APP_NAME, exc.exit_code, str(exc))
     except Exception as exc:
+        if coro is not None and inspect.getcoroutinestate(coro) == inspect.CORO_CREATED:
+            coro.close()
         return emit_final_status(APP_NAME, ExitCode.GENERAL_FAILURE, str(exc))
 
 

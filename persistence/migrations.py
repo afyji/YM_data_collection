@@ -12,6 +12,7 @@ from typing import Iterable
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Connection, Engine
 
+from YM_data_collection.persistence.datetime_utils import utc_now_sql
 from YM_data_collection.utils.constants import SCHEMA_MIGRATIONS_TABLE
 
 
@@ -218,7 +219,7 @@ def plan_pending_migrations(
 def upsert_migration_record(connection: Connection, migration: MigrationFile, status: str) -> None:
     """Insert or update a migration execution record."""
 
-    executed_at_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    executed_at_utc = utc_now_sql()
     exists = connection.execute(
         text("SELECT id FROM schema_migrations WHERE version = :version"),
         {"version": migration.version},
