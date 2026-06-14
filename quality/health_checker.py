@@ -215,7 +215,7 @@ class ServiceHealthChecker:
     def run_all(
         self,
         http_url: str | None = None,
-        max_data_age_seconds: int = 600,
+        max_data_age_seconds: int = 7200,
     ) -> SystemHealth:
         """Run all checks, aggregate results.
 

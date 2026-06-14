@@ -303,3 +303,24 @@ class TestRunAll:
         assert "mysql" in components
         assert "redis" in components
         assert "data_freshness" in components
+
+    def test_default_run_all_threshold_allows_normal_1h_kline_age(
+        self,
+        mock_session_factory,
+        mock_cache_client,
+    ):
+        checker = ServiceHealthChecker(
+            session_factory=mock_session_factory,
+            cache_client=mock_cache_client,
+        )
+
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        checker._kline_repo = MagicMock()
+        # A 1h kline can normally be over 3600 seconds old when checking open_ts_ms.
+        checker._kline_repo.query_latest.return_value = [{"open_ts_ms": now_ms - 5_400_000}]
+
+        health = checker.run_all(http_url=None)
+
+        freshness = next(s for s in health.statuses if s.component == "data_freshness")
+        assert freshness.healthy is True
+        assert health.overall_healthy is True
