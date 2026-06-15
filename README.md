@@ -343,7 +343,7 @@ python -m pytest YM_data_collection/tests/ -q
 当前代码验证结果：
 
 ```text
-779 passed, 0 xfailed
+900 passed
 ```
 
 说明：
@@ -360,17 +360,15 @@ python -m YM_data_collection.scripts.acceptance_checklist
 当前代码层面结果：
 
 ```text
-PASSED: 12 | FAILED: 0 | SKIPPED: 4 | TOTAL: 16
+PASSED: 14 | FAILED: 0 | SKIPPED: 2 | TOTAL: 16
 ```
 
-其中 4 个 SKIP 通常是：
+其中 SKIP 通常是外部依赖没有按当前 shell 的 `.env` 正确加载，例如：
 
-- MySQL 没连上
-- Redis 没连上
-- HTTP API 服务未启动
-- runtime-status 服务未启动
+- MySQL 凭证没有暴露给当前验收进程
+- Redis 需要密码但当前 shell 没有对应环境变量
 
-这不是代码失败，是外部服务或长进程没启动。
+这不是代码失败。正式服务可通过 `/api/v1/system/health` 继续确认 MySQL、Redis、HTTP、WS、streams 是否都为 `ok`。
 
 ---
 
@@ -676,9 +674,7 @@ python -m YM_data_collection.apps.run_data_api \
   --config YM_data_collection/config/base.yaml \
   --env dev \
   --http-host 127.0.0.1 \
-  --http-port 18081 \
-  --ws-host 127.0.0.1 \
-  --ws-port 8001
+  --http-port 18081
 ```
 
 默认 HTTP 地址：
@@ -703,6 +699,13 @@ curl http://127.0.0.1:18081/api/v1/system/health
 
 ```bash
 curl http://127.0.0.1:18081/api/v1/system/runtime-status
+```
+
+OpenAPI / Swagger 文档入口：
+
+```text
+http://127.0.0.1:18081/docs
+http://127.0.0.1:18081/openapi.json
 ```
 
 如果后续打开 token 鉴权，需要加：
@@ -1079,9 +1082,7 @@ python -m YM_data_collection.apps.run_data_api \
   --config YM_data_collection/config/base.yaml \
   --env dev \
   --http-host 127.0.0.1 \
-  --http-port 18081 \
-  --ws-host 127.0.0.1 \
-  --ws-port 8001
+  --http-port 18081
 ```
 
 另开一个终端测试：
@@ -1113,7 +1114,7 @@ python -m pytest YM_data_collection/tests/ -q
 当前状态：
 
 ```text
-779 passed, 0 xfailed, 51 个测试文件
+900 passed
 ```
 
 ### 19.2 指定测试文件
@@ -1125,7 +1126,7 @@ python -m pytest YM_data_collection/tests/test_contract_ws.py -q
 当前 WS 契约测试状态：
 
 ```text
-91 passed, 0 xfailed
+91 passed
 ```
 
 ### 19.3 验收清单
