@@ -1163,10 +1163,13 @@ class TestCoverageMatrixOpenAPI:
         import yaml
         from pathlib import Path
 
-        openapi_path = Path(
-            "/mnt/mac_quant_system/docs/01_data_collection_system/17_http_openapi_draft.yaml"
+        openapi_path = (
+            Path(__file__).resolve().parents[2]
+            / "docs"
+            / "01_data_collection_system"
+            / "17_http_openapi_draft.yaml"
         )
-        with open(openapi_path) as f:
+        with open(openapi_path, encoding="utf-8") as f:
             spec = yaml.safe_load(f)
 
         paths = spec.get("paths", {})

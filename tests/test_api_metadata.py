@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -16,6 +17,14 @@ from YM_data_collection.domain.models import (
     FileManifest,
     IngestCheckpoint,
     InstrumentInfo,
+)
+
+
+OPENAPI_DRAFT_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "docs"
+    / "01_data_collection_system"
+    / "17_http_openapi_draft.yaml"
 )
 
 
@@ -936,11 +945,7 @@ class TestOpenAPIParameterAlignmentDC062:
     def openapi_spec(self):
         import yaml
 
-        with open(
-            "/mnt/mac_quant_system/docs/01_data_collection_system/"
-            "17_http_openapi_draft.yaml",
-            "r",
-        ) as f:
+        with open(OPENAPI_DRAFT_PATH, "r", encoding="utf-8") as f:
             return yaml.safe_load(f)
 
     def _path_params(self, spec, path_suffix):
@@ -1040,11 +1045,7 @@ class TestOpenAPIManifestIdDC063:
     def openapi_spec(self):
         import yaml
 
-        with open(
-            "/mnt/mac_quant_system/docs/01_data_collection_system/"
-            "17_http_openapi_draft.yaml",
-            "r",
-        ) as f:
+        with open(OPENAPI_DRAFT_PATH, "r", encoding="utf-8") as f:
             return yaml.safe_load(f)
 
     def _path_params(self, spec, path_suffix):
